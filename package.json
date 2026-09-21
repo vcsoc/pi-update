@@ -1,0 +1,10 @@
+{
+  "name": "pi-update-local",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "pi": { "extensions": ["./index.ts"] },
+  "scripts": { "test": "node --test test/*.test.mjs", "check": "node --check core.mjs && node --check restart.mjs && node --check launcher.mjs && npm test" },
+  "engines": { "node": ">=22" },
+  "dependencies": { "fflate": "0.8.3", "tar": "7.5.22" }
+}
