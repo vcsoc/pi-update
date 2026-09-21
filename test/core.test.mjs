@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import * as tar from 'tar';
@@ -16,7 +17,28 @@ test('compiled Bun virtual argv is ignored in favor of the actual mise executabl
   const root = await temp(t), folder = join(root, 'mise', 'installs', 'pi', '1.2.3', 'pi'); await mkdir(folder, { recursive: true });
   const binary = join(folder, 'pi'); await writeFile(binary, 'test'); await writeFile(join(folder, 'package.json'), JSON.stringify({ name: '@earendil-works/pi-coding-agent', version: '1.2.3' }));
   const info = inspectInstallation(binary, ['bun', '/$bunfs/root/pi']);
-  assert.equal(info.kind, 'mise'); assert.equal(info.executable, binary); assert.equal(info.current, '1.2.3');
+  assert.equal(info.kind, 'mise'); assert.equal(info.executable, realpathSync(binary)); assert.equal(info.current, '1.2.3');
+});
+test('Volta installation is detected from its package image', async t => {
+  const root = await temp(t), folder = join(root, 'tools/image/packages', '@earendil-works/pi-coding-agent/lib/node_modules', '@earendil-works/pi-coding-agent');
+  await mkdir(folder, { recursive: true });
+  const entry = join(folder, 'cli.js'); await writeFile(entry, '');
+  await writeFile(join(folder, 'package.json'), JSON.stringify({ name: '@earendil-works/pi-coding-agent', version: '1.0.0' }));
+  const info = inspectInstallation(process.execPath, ['node', entry]);
+  assert.equal(info.kind, 'volta'); assert.equal(info.voltaHome, realpathSync(root));
+});
+test('Volta update installs exact release and verifies before activation', async t => {
+  const root = await temp(t), calls = [];
+  const result = await performUpdate({ installation: { kind: 'volta', voltaHome: root, executable: process.execPath, args: ['/old/pi'], current: '1.0.0' }, release: release('1.1.0'), home: root, findCommand: name => { assert.equal(name, 'volta'); return '/volta'; }, runner: async (file, args, options) => {
+    calls.push([file, ...args]);
+    if (file === '/volta') { assert.equal(options.env.VOLTA_HOME, root); assert.equal(options.cwd, root); }
+    if (args[0] === 'which') return join(root, 'pi.js');
+    return args.includes('--version') ? '1.1.0' : '';
+  } });
+  assert.deepEqual(calls[0], ['/volta', 'install', '@earendil-works/pi-coding-agent@1.1.0']);
+  assert.equal(result.runtime.kind, 'volta');
+  assert.deepEqual(result.runtime.args, [join(root, 'pi.js')]);
+  assert.equal(JSON.parse(await readFile(join(root, 'active.json'))).version, '1.1.0');
 });
 test('stable release comparison is numeric and rejects ambiguous/prerelease versions', () => {
   assert.equal(compare('0.9.0', '0.10.0'), -1); assert.equal(version('v0.86.1'), '0.86.1');

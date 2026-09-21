@@ -40,7 +40,12 @@ export function inspectInstallation(execPath = process.execPath, argv = process.
     for (let i = 0; i < 6; i++, folder = dirname(folder)) {
       try {
         const manifest = JSON.parse(readFileSync(join(folder, 'package.json'), 'utf8'));
-        if (manifest.name === PACKAGE) return { kind: 'npm', executable, args: [entry], packageRoot: folder, current: version(manifest.version) };
+        if (manifest.name === PACKAGE) {
+          const marker = '/tools/image/packages/', normalizedFolder = folder.replaceAll('\\', '/');
+          const offset = normalizedFolder.indexOf(marker);
+          const voltaHome = offset >= 0 ? normalizedFolder.slice(0, offset) : null;
+          return { kind: voltaHome ? 'volta' : 'npm', ...(voltaHome ? { voltaHome } : {}), executable, args: [entry], packageRoot: folder, current: version(manifest.version) };
+        }
       } catch {}
     }
   }
@@ -178,7 +183,17 @@ export async function performUpdate({ installation, release, home = HOME, signal
     if (compare(targetVersion, installation.current) === 0 && !extensions) return { changed: false, runtime: { ...installation, version: installation.current } };
     signal?.throwIfAborted();
     let runtime, fallback;
-    if (!portable && installation.kind === 'mise' && compare(targetVersion, installation.current) > 0) {
+    if (!portable && installation.kind === 'volta' && compare(targetVersion, installation.current) > 0) {
+      const volta = findCommand('volta');
+      if (!volta) throw new Error('Pi is managed by Volta but volta is not on PATH. Restore Volta or use /update --portable.');
+      const env = { ...process.env, VOLTA_HOME: installation.voltaHome };
+      // Stay outside project pins when resolving the newly installed global tool.
+      emit({ phase: 'Installing through Volta', detail: `${PACKAGE}@${targetVersion}`, percent: null, safeToCancel: false });
+      await runner(volta, ['install', `${PACKAGE}@${targetVersion}`], { cwd: installation.voltaHome, env, onLine: detail => emit({ detail }) });
+      const entry = await runner(volta, ['which', 'pi'], { cwd: installation.voltaHome, env, timeout: 30000 });
+      if (!isAbsolute(entry)) throw new Error('Volta returned an invalid Pi executable path');
+      runtime = { executable: installation.executable, args: [entry], version: targetVersion, kind: 'volta' };
+    } else if (!portable && installation.kind === 'mise' && compare(targetVersion, installation.current) > 0) {
       const mise = findCommand('mise');
       if (!mise) throw new Error('Pi is managed by mise but mise is not on PATH. Restore mise or explicitly use /update --portable.');
       emit({ phase: 'Installing through mise', detail: `pi@${targetVersion}; keeping the old installation`, percent: null, safeToCancel: false });
@@ -191,7 +206,9 @@ export async function performUpdate({ installation, release, home = HOME, signal
     } else if (!portable && installation.kind === 'npm' && compare(targetVersion, installation.current) > 0) {
       const npm = findCommand('npm'); if (!npm) throw new Error('npm is not on PATH; use /update --portable instead.');
       const globalRoot = await runner(npm, ['root', '-g'], { timeout: 30000 });
-      if (realpathSync(join(globalRoot, '@earendil-works', 'pi-coding-agent')) !== installation.packageRoot) throw new Error('This is not the active global npm installation. Use /update --portable; refusing to update a different npm prefix.');
+      let matchingPrefix = false;
+      try { matchingPrefix = realpathSync(join(globalRoot, '@earendil-works', 'pi-coding-agent')) === realpathSync(installation.packageRoot); } catch { /* Missing global prefix is not the active installation. */ }
+      if (!matchingPrefix) throw new Error('This is not the active global npm installation. Use /update --portable; refusing to update a different npm prefix.');
       emit({ phase: 'Installing through npm', detail: `${PACKAGE}@${targetVersion} (dependency scripts disabled)`, percent: null, safeToCancel: false });
       await runner(npm, ['install', '-g', '--ignore-scripts', `${PACKAGE}@${targetVersion}`], { onLine: detail => emit({ detail }) });
       runtime = { executable: installation.executable, args: installation.args, version: targetVersion, kind: 'npm' };
