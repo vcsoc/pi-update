@@ -35,13 +35,19 @@ The canonical release repository is now **`earendil-works/pi`**; the old `pi-mon
 
 ## Install
 
-Copy the whole directory into `~/.pi/agent/extensions/update/` (Windows: `%USERPROFILE%\.pi\agent\extensions\update\`). From that directory:
+Install the standalone Git package (dependencies are installed automatically):
 
 ```sh
-npm ci --ignore-scripts
+pi install https://github.com/vcsoc/pi-update.git
 ```
 
-Then run `/reload` in Pi. Uses small `tar` and `fflate` dependencies for safe, cross-platform extraction. Node 22+ is required for the optional launcher/tests; the extension itself runs inside Pi (tested with Pi 0.85.1 / Bun 1.3.14).
+Save/send any companion drafts, then run `/reload` in Pi. Update this package later with `pi update https://github.com/vcsoc/pi-update.git` or `pi update --extensions`. That updates the extension code; running `/update` is what upgrades the Pi harness.
+
+If migrating a manually discovered `~/.pi/agent/extensions/update` folder/symlink, back it up and move it outside extension discovery to avoid duplicate `/update` registration. Preserve `~/.pi/update` (active runtime, releases and launcher settings). Existing optional shell launchers may reference the old source: run `/update launcher` after loading the Git version to retarget them. This does not edit PATH or shell startup files.
+
+Uses pinned small `tar` and `fflate` dependencies for safe, cross-platform extraction. Node 22.12+ is required for the optional launcher/tests; the extension itself runs inside Pi. It was originally tested with Pi0.85.1/Bun1.3.14; the standalone migration is also qualified against Pi1.1.0.
+
+For source development, clone this repository and run `npm ci --ignore-scripts --legacy-peer-deps`. Pi supplies the declared host peer packages when loading the extension.
 
 ## Animated progress and cancellation
 
@@ -121,11 +127,11 @@ If your shell still prints `Location of pi executable: /$bunfs/root/pi`, it is b
 
 ```sh
 npm run check
-node test/pi-smoke.mjs
+PI_UPDATE_HOME="$(mktemp -d)" npm run test:pi
 ```
 
 Automated tests cover virtual-path detection, platform assets, trusted URLs, checksum/size failures, archive traversal/link rejection, update locking, scoped mise/npm commands, package-update failures, cancellation, activation only after verification, first-command session snapshots, restart argument preservation and supervised handoff.
 
-The Pi smoke test loads the real extension, runs `/update check`, exercises animated frames at widths including 93 columns, then tests graceful POSIX replacement with the same PID, session ID and saved entries. It makes **no model calls and does not upgrade the installed Pi**. Its RPC test closes stdin to let RPC drain shutdown; an additional live 93-column interactive TUI restart was tested successfully during development.
+Use an isolated `PI_UPDATE_HOME` for the smoke test and remove that temporary directory afterwards; its restart fixture writes its own active-runtime record. The Pi smoke test loads the real extension, runs `/update check`, exercises animated frames at widths including 93 columns, then tests graceful POSIX replacement with the same PID, session ID and saved entries. It makes **no model calls and does not upgrade the installed Pi**. Its RPC test closes stdin to let RPC drain shutdown; an additional live 93-column interactive TUI restart was tested successfully during development.
 
 Also live-tested: downloading the official Linux x64 0.86.1 archive, checking its SHA-256, extracting it and executing its `--version` from a temporary staging directory. The existing installation was untouched by that test.

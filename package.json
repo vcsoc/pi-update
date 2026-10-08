@@ -1,10 +1,22 @@
 {
-  "name": "pi-update-local",
+  "name": "pi-update",
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "description": "Animated Pi harness updates with verified installation and safe same-session restart",
+  "keywords": ["pi-package", "pi-extension", "updates"],
+  "repository": { "type": "git", "url": "https://github.com/vcsoc/pi-update.git" },
+  "homepage": "https://github.com/vcsoc/pi-update#readme",
+  "bugs": { "url": "https://github.com/vcsoc/pi-update/issues" },
+  "files": ["index.ts", "ui.ts", "*.mjs", "test/", "README.md"],
   "pi": { "extensions": ["./index.ts"] },
-  "scripts": { "test": "node --test test/*.test.mjs", "check": "node --check core.mjs && node --check restart.mjs && node --check launcher.mjs && npm test" },
-  "engines": { "node": ">=22" },
+  "peerDependencies": { "@earendil-works/pi-coding-agent": "*", "@earendil-works/pi-tui": "*" },
+  "peerDependenciesMeta": { "@earendil-works/pi-coding-agent": { "optional": true }, "@earendil-works/pi-tui": { "optional": true } },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "test:pi": "node test/pi-smoke.mjs",
+    "check": "node --check core.mjs && node --check restart.mjs && node --check launcher.mjs && npm test"
+  },
+  "engines": { "node": ">=22.12.0" },
   "dependencies": { "fflate": "0.8.3", "tar": "7.5.22" }
 }
